@@ -16,8 +16,19 @@ public static class DragonSmokeTestBootstrap
 {
     private const string PrefabResourcePath = "Dragon/BGE_Dragon_2.7_Animation_Only";
     private const string ControllerResourcePath = "Dragon/BGE_Dragon_2.7_Animation_Only";
-    private const float TargetVisualSize = 2.6f; // met, canh lon nhat sau khi scale
-    private const float SideOffsetFromCenter = 0.9f; // met, moi con cach tam mat phang bao nhieu - chua cho item chinh o giua
+
+    // Kich thuoc/khoang cach gio tinh theo kich thuoc THAT cua mat phang phat hien duoc
+    // (plane.size), khong con la hang so co dinh - mat phang nho (ban con) ra rong nho +
+    // gan nhau, mat phang lon (san nha) ra rong to + xa nhau hon, nhung luon bi gioi han
+    // trong khoang Min/Max de: (1) khong qua nho khi mat phang be, (2) khong qua to/xa
+    // toi muc troi khoi khung hinh camera khi mat phang rat lon.
+    private const float VisualSizeFractionOfPlane = 1.4f; // % canh nho hon cua mat phang dung lam kich thuoc rong
+    private const float MinVisualSize = 0.8f; // met
+    private const float MaxVisualSize = 8f; // met
+
+    private const float SideOffsetFractionOfPlaneWidth = 0.16f; // % chieu rong mat phang dung lam khoang cach tam
+    private const float MinSideOffsetMultiplierOfSize = 0.35f; // toi thieu = % kich thuoc rong, tranh 2 con de len nhau o giua
+    private const float MaxSideOffset = 1.6f; // met
 
     // Ten state duy nhat da wire san trong Animator Controller di kem file (chi co 1 state
     // "Run"). Ta doi CLIP gan vao state nay (qua AnimatorOverrideController) de phat lan
@@ -65,7 +76,18 @@ public static class DragonSmokeTestBootstrap
     // duoc phat hien, roi spawn 2 con rong 2 ben - chi lam 1 lan cho lan phat hien dau tien.
     private sealed class PlaneWaiter : MonoBehaviour
     {
+        // Cho nguoi dung lia camera quet xung quanh trong khoang thoi gian nay TRUOC KHI
+        // chon mat phang - ARCore/ARKit co the tach 1 mat ban/san thanh nhieu mat phang nho
+        // luc dau roi gop lai sau, va plane.size luc moi phat hien luon rat nho. Sau khi het
+        // gio, chon mat phang NGANG LON NHAT trong tat ca mat phang da thay (khong phai mat
+        // phang dau tien tinh co thay) - dung tinh than "mat phang cuoi cung sau khi quet
+        // xong", vi AR Foundation khong co khai niem "mat phang cuoi" ro rang, chi co the
+        // suy ra bang cach chon mat day du nhat sau ca khoang thoi gian quet.
+        private const float ScanSeconds = 5f;
+
         private ARPlaneManager _planeManager;
+        private bool _hasSeenAnyHorizontalPlane;
+        private float _scanTimer;
 
         public void Init(ARPlaneManager planeManager)
         {
@@ -76,6 +98,11 @@ public static class DragonSmokeTestBootstrap
 
         private void OnTrackablesChanged(ARTrackablesChangedEventArgs<ARPlane> args)
         {
+            if (_hasSeenAnyHorizontalPlane)
+            {
+                return; // da bat dau dem gio quet roi, khong can xu ly gi them o day
+            }
+
             foreach (var plane in args.added)
             {
                 if (plane.alignment != PlaneAlignment.HorizontalUp)
@@ -83,19 +110,74 @@ public static class DragonSmokeTestBootstrap
                     continue; // bo qua tuong/mat huong xuong, chi lay san/ban
                 }
 
-                _planeManager.trackablesChanged.RemoveListener(OnTrackablesChanged);
-                SpawnTwoDragons(plane);
-                Destroy(gameObject);
+                _hasSeenAnyHorizontalPlane = true;
+                _scanTimer = 0f;
+                Debug.Log($"[DragonSmokeTest] Da thay mat phang dau tien, tiep tuc quet them {ScanSeconds}s...");
                 return;
             }
         }
 
+        private void Update()
+        {
+            if (!_hasSeenAnyHorizontalPlane)
+            {
+                return;
+            }
+
+            _scanTimer += Time.deltaTime;
+            if (_scanTimer < ScanSeconds)
+            {
+                return;
+            }
+
+            _planeManager.trackablesChanged.RemoveListener(OnTrackablesChanged);
+
+            var bestPlane = FindLargestHorizontalPlane();
+            if (bestPlane == null)
+            {
+                Debug.LogWarning("[DragonSmokeTest] Khong con mat phang nao hop le sau khi quet xong, huy.");
+                Destroy(gameObject);
+                return;
+            }
+
+            SpawnTwoDragons(bestPlane);
+            Destroy(gameObject);
+        }
+
+        // Duyet tat ca mat phang dang duoc theo doi (khong chi mat phang thay dau tien),
+        // chon mat phang nam ngang huong len co dien tich lon nhat - day la mat phang "day
+        // du nhat" sau ca qua trinh quet, gan dung voi y "mat phang cuoi cung".
+        private ARPlane FindLargestHorizontalPlane()
+        {
+            ARPlane best = null;
+            var bestArea = -1f;
+
+            foreach (var plane in _planeManager.trackables)
+            {
+                if (plane.alignment != PlaneAlignment.HorizontalUp)
+                {
+                    continue;
+                }
+
+                var area = plane.size.x * plane.size.y;
+                if (area > bestArea)
+                {
+                    bestArea = area;
+                    best = plane;
+                }
+            }
+
+            return best;
+        }
+
         private static void SpawnTwoDragons(ARPlane plane)
         {
-            var right = plane.transform.right;
+            ComputeResponsiveSizing(plane, out var visualSize, out var sideOffset);
 
-            var leftPivot = SpawnOneDragon(plane, -right * SideOffsetFromCenter, startAnimationIndex: 0);
-            var rightPivot = SpawnOneDragon(plane, right * SideOffsetFromCenter, startAnimationIndex: 2);
+            var right = ComputeUserRelativeRight(plane);
+
+            var leftPivot = SpawnOneDragon(plane, -right * sideOffset, visualSize, startAnimationIndex: 0);
+            var rightPivot = SpawnOneDragon(plane, right * sideOffset, visualSize, startAnimationIndex: 2);
 
             if (leftPivot == null || rightPivot == null)
             {
@@ -107,10 +189,41 @@ public static class DragonSmokeTestBootstrap
             leftSeq.SetInteractionPartner(rightPivot.transform, plane.center);
             rightSeq.SetInteractionPartner(leftPivot.transform, plane.center);
 
-            Debug.Log($"[DragonSmokeTest] Da spawn 2 con rong 2 ben mat phang tai {plane.center}, chua cho item chinh o giua.");
+            Debug.Log($"[DragonSmokeTest] Da spawn 2 con rong 2 ben mat phang tai {plane.center} " +
+                      $"(mat phang {plane.size.x:F2}x{plane.size.y:F2}m -> rong {visualSize:F2}m, cach tam {sideOffset:F2}m), chua cho item chinh o giua.");
         }
 
-        private static GameObject SpawnOneDragon(ARPlane plane, Vector3 worldOffset, int startAnimationIndex)
+        // Tinh kich thuoc rong va khoang cach tam theo kich thuoc THAT cua mat phang vua
+        // phat hien (plane.size, don vi met) - xem giai thich cac hang so o dau file.
+        private static void ComputeResponsiveSizing(ARPlane plane, out float visualSize, out float sideOffset)
+        {
+            var planeSpan = Mathf.Min(plane.size.x, plane.size.y);
+            visualSize = Mathf.Clamp(planeSpan * VisualSizeFractionOfPlane, MinVisualSize, MaxVisualSize);
+
+            var rawOffset = plane.size.x * SideOffsetFractionOfPlaneWidth;
+            var minOffset = visualSize * MinSideOffsetMultiplierOfSize;
+            sideOffset = Mathf.Clamp(rawOffset, minOffset, MaxSideOffset);
+        }
+
+        // Truc "trai-phai" de xep 2 con rong phai la trai-phai THEO GOC NHIN CUA USER luc
+        // spawn, khong phai truc noi bo cua mat phang (plane.transform.right) - truc do do
+        // ARCore/ARKit tu gan cho mat phang, co the vo tinh chi theo chieu sau (xa/gan
+        // camera) thay vi ngang, gay ra loi rong dung truoc-sau thay vi ngang hang. Cach
+        // dung: lay vector "right" cua camera, chieu xuong mat phang (bo phan vuong goc voi
+        // normal) de ra 1 truc ngang thuc su nam tren mat phang va dung huong voi nguoi dung.
+        private static Vector3 ComputeUserRelativeRight(ARPlane plane)
+        {
+            var camera = Camera.main;
+            if (camera == null)
+            {
+                return plane.transform.right; // fallback neu khong co camera
+            }
+
+            var projectedRight = Vector3.ProjectOnPlane(camera.transform.right, plane.normal);
+            return projectedRight.sqrMagnitude > 0.0001f ? projectedRight.normalized : plane.transform.right;
+        }
+
+        private static GameObject SpawnOneDragon(ARPlane plane, Vector3 worldOffset, float visualSize, int startAnimationIndex)
         {
             var dragonAsset = Resources.Load<GameObject>(PrefabResourcePath);
             if (dragonAsset == null)
@@ -123,7 +236,7 @@ public static class DragonSmokeTestBootstrap
             var dragon = Object.Instantiate(dragonAsset, pivot.transform);
             dragon.name = "Dragon";
 
-            ScaleAndCenterWithinPivot(dragon, TargetVisualSize);
+            ScaleAndCenterWithinPivot(dragon, visualSize);
 
             pivot.transform.position = plane.center + worldOffset;
             pivot.transform.rotation = FaceTowardUser(pivot.transform.position, plane.normal);
