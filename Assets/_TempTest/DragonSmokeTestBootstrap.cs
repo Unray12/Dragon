@@ -141,7 +141,23 @@ public static class DragonSmokeTestBootstrap
             }
 
             SpawnTwoDragons(bestPlane);
+            StopPlaneDetectionAndHideVisuals(_planeManager);
             Destroy(gameObject);
+        }
+
+        // Sau khi da spawn xong 2 con rong, khong can detect them mat phang moi nua, va an
+        // luon cac mesh/luoi highlight danh dau mat phang da phat hien (de UI sach hon,
+        // khong con luoi/vien mau che len camera). An tung GameObject cua plane truoc (thay
+        // vi xoa) roi moi tat ARPlaneManager - tat manager truoc co the khong don sach cac
+        // plane da instantiate tuy version, nen chu dong an het cho chac.
+        private static void StopPlaneDetectionAndHideVisuals(ARPlaneManager planeManager)
+        {
+            foreach (var plane in planeManager.trackables)
+            {
+                plane.gameObject.SetActive(false);
+            }
+
+            planeManager.enabled = false;
         }
 
         // Duyet tat ca mat phang dang duoc theo doi (khong chi mat phang thay dau tien),
