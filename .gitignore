@@ -105,3 +105,28 @@ InitTestScene*.unity*
 
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
+
+# --- Bổ sung riêng cho project này ---
+
+# Unity 6 / newer IDE tooling generates .slnx (not covered by the *.sln pattern above)
+*.slnx
+
+# Android/iOS signing keys — không bao giờ commit key ký app
+*.keystore
+*.keystore.meta
+*.jks
+*.p12
+*.mobileprovision
+*.p8
+
+# Firebase/Google Services config (nếu thêm sau này) — chứa thông tin theo từng máy/môi trường
+google-services.json
+GoogleService-Info.plist
+
+# Biến môi trường/secrets cục bộ
+.env
+.env.local
+
+# OS cruft
+.DS_Store
+Thumbs.db
