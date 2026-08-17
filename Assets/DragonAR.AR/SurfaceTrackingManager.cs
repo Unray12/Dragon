@@ -93,7 +93,7 @@ namespace DragonAR.AR
             var bestPlane = FindLargestHorizontalPlane();
             if (bestPlane == null)
             {
-                Debug.LogWarning("[SurfaceTrackingManager] Khong con mat phang nao hop le sau khi quet xong.");
+                Debug.LogWarning("[SurfaceTrackingManager] No valid plane remaining after the scan completed.");
                 return;
             }
 

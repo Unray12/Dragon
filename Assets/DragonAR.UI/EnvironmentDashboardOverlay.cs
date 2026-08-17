@@ -9,10 +9,19 @@ namespace DragonAR.UI
 {
     // Dashboard hien thi so lieu moi truong (humidity/temperature/wind + bieu do lich su)
     // dang the (card) sang mau, bo goc, co bong do nhe - theo anh tham chieu dashboard IoT
-    // nguoi dung cung cap (kieu Grafana/smart-home: nen xam nhat, card trang, so lieu to
-    // dam, chart mau xanh duong). Dat co dinh o 1 vi tri man hinh luc spawn, CHI di chuyen
-    // duoc khi nguoi dung tu tay keo. Du lieu hien dang RANDOM (chua noi cam bien/API thoi
-    // tiet that) - xem context/OPEN_QUESTIONS.md.
+    // nguoi dung cung cap (kieu Grafana/smart-home). Du lieu hien dang RANDOM (chua noi cam
+    // bien/API thoi tiet that) - xem context/OPEN_QUESTIONS.md.
+    //
+    // QUAN TRONG - day la World Space Canvas, NEO VAO 1 TOA DO THAT TRONG KHONG GIAN AR
+    // (khong phai gan theo camera, khong phai vi tri co dinh tren man hinh) - phai xoay
+    // camera huong ve vi tri do moi thay duoc panel, giong 1 vat the AR thuc su. VI TRI BAN
+    // DAU duoc tinh 1 LAN DUY NHAT luc spawn de nam BEN CANH con rong (dragon cung gan theo
+    // camera luc do) - xem cach goi ham nay trong AppBootstrapper. Sau khi spawn, panel
+    // dung yen trong khong gian, khong tu di chuyen theo camera nua. Panel tu xoay quanh
+    // truc dung de luon huong mat ve camera (billboard) cho de doc du dung tu goc nao. Keo
+    // tha bang ngon tay se CHIEU vi tri cham man hinh xuong 1 mat phang huong ve camera tai
+    // vi tri hien tai cua panel, doi VI TRI 3D THAT cua panel - sau khi tha tay, panel dung
+    // yen (fix) tai toa do 3D moi do, khong quay lai vi tri cu.
     public static class EnvironmentDashboardOverlay
     {
         private const float PanelWidth = 440f;
@@ -20,57 +29,61 @@ namespace DragonAR.UI
         private const float RootPadding = 16f;
         private const float CardSpacing = 12f;
 
-        // Vi tri co dinh ban dau (offset tu tam canvas, don vi la don vi canvas o
-        // ReferenceResolution) - phia tren-giua man hinh, chua vao vi tri 3D nao.
-        private static readonly Vector2 FixedAnchoredPosition = new(0f, 560f);
+        // 1 don vi UI (pixel) = bao nhieu met ngoai doi that. 440x480 o scale nay ra panel
+        // roughly 0.53m x 0.58m - kich thuoc hop ly cho 1 "man hinh" AR lo lung.
+        private const float WorldUnitsPerPixel = 0.0012f;
 
-        private static readonly Color PageBackgroundColor = new(0.933f, 0.949f, 0.965f, 0.96f); // #EEF2F6
-        private static readonly Color CardBackgroundColor = new(1f, 1f, 1f, 0.98f);
+        private static readonly Color PageBackgroundColor = new(0.933f, 0.949f, 0.965f, 0.42f); // #EEF2F6, trong suot
+        private static readonly Color CardBackgroundColor = new(1f, 1f, 1f, 0.55f); // trong suot
         private static readonly Color ShadowColor = new(0f, 0f, 0f, 0.18f);
         private static readonly Color LabelInkColor = new(0.42f, 0.45f, 0.49f, 1f); // #6B7280
         private static readonly Color ValueInkColor = new(0.07f, 0.09f, 0.15f, 1f); // #12172A
         private static readonly Color ChartColor = new(0.165f, 0.471f, 0.843f, 1f); // #2A78D6
 
-        public static void Spawn()
+        public static void Spawn(Vector3 worldPosition)
         {
             EnsureEventSystem();
 
+            var camera = Camera.main;
+
             var canvasGo = new GameObject("DashboardCanvas");
             var canvas = canvasGo.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            canvas.renderMode = RenderMode.WorldSpace;
+            canvas.worldCamera = camera;
 
-            var scaler = canvasGo.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1080f, 1920f);
-            scaler.matchWidthOrHeight = 0.5f;
+            var canvasRect = canvasGo.GetComponent<RectTransform>();
+            canvasRect.sizeDelta = new Vector2(PanelWidth, PanelHeight);
+            canvasGo.transform.localScale = Vector3.one * WorldUnitsPerPixel;
 
             canvasGo.AddComponent<GraphicRaycaster>();
 
-            var roundedSprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Background.psd");
+            var roundedSprite = RoundedRectSpriteFactory.GetShared();
 
             var rootGo = new GameObject("DashboardRoot", typeof(RectTransform));
             rootGo.transform.SetParent(canvasGo.transform, false);
 
             var rootRect = rootGo.GetComponent<RectTransform>();
-            rootRect.sizeDelta = new Vector2(PanelWidth, PanelHeight);
-            rootRect.anchorMin = new Vector2(0.5f, 0.5f);
-            rootRect.anchorMax = new Vector2(0.5f, 0.5f);
-            rootRect.pivot = new Vector2(0.5f, 0.5f);
+            rootRect.anchorMin = Vector2.zero;
+            rootRect.anchorMax = Vector2.one;
+            rootRect.offsetMin = Vector2.zero;
+            rootRect.offsetMax = Vector2.zero;
 
             var rootBackground = rootGo.AddComponent<Image>();
             rootBackground.sprite = roundedSprite;
             rootBackground.type = Image.Type.Sliced;
             rootBackground.color = PageBackgroundColor;
 
-            // Root la handle keo - toan bo card ben trong la con cua no nen di chuyen theo.
-            rootGo.AddComponent<DashboardDragHandler>();
+            // Handle keo - di chuyen TOA DO THE GIOI THAT cua ca canvas (khong phai
+            // anchoredPosition man hinh). Gan tren rootGo (co Image de nhan tia cham).
+            var dragHandler = rootGo.AddComponent<DashboardDragHandler>();
+            dragHandler.Init(canvasGo.transform, camera);
 
             var rootLayout = rootGo.AddComponent<VerticalLayoutGroup>();
             rootLayout.padding = new RectOffset((int)RootPadding, (int)RootPadding, (int)RootPadding, (int)RootPadding);
             rootLayout.spacing = CardSpacing;
             rootLayout.childAlignment = TextAnchor.UpperCenter;
             rootLayout.childControlWidth = true;
-            rootLayout.childControlHeight = false;
+            rootLayout.childControlHeight = true; // bat buoc = true, neu khong cac phan (title/statsRow/historyCard) giu nguyen kich thuoc RectTransform mac dinh cua Unity thay vi preferredHeight da khai bao, gay chong lan
             rootLayout.childForceExpandWidth = true;
             rootLayout.childForceExpandHeight = false;
 
@@ -100,7 +113,7 @@ namespace DragonAR.UI
             historyLayout.padding = new RectOffset(16, 16, 12, 12);
             historyLayout.spacing = 8f;
             historyLayout.childControlWidth = true;
-            historyLayout.childControlHeight = false;
+            historyLayout.childControlHeight = true; // cung ly do o rootLayout - tranh "HISTORY" chong len bieu do
             historyLayout.childForceExpandWidth = true;
             historyLayout.childForceExpandHeight = false;
 
@@ -117,7 +130,8 @@ namespace DragonAR.UI
             var driver = rootGo.AddComponent<DashboardDataDriver>();
             driver.Init(humidityValue, temperatureValue, windValue, bars);
 
-            rootRect.anchoredPosition = FixedAnchoredPosition;
+            canvasGo.transform.position = worldPosition;
+            canvasGo.AddComponent<BillboardToCamera>();
         }
 
         // 1 the trang bo goc + bong do nhe, dung chung cho ca stat card va history card.
@@ -149,7 +163,7 @@ namespace DragonAR.UI
             layout.spacing = 6f;
             layout.childAlignment = TextAnchor.UpperLeft;
             layout.childControlWidth = true;
-            layout.childControlHeight = false;
+            layout.childControlHeight = true; // tranh nhan/gia tri chong len nhau ben trong 1 stat card
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
 
@@ -259,6 +273,14 @@ namespace DragonAR.UI
 
             private void Update()
             {
+                // Bao ve neu Init() chua kip chay truoc Update() dau tien (vi du do
+                // recompile/domain-reload xen giua luc dang Play) - tranh
+                // ArgumentOutOfRangeException tren RemoveAt(0) khi list rong.
+                if (_history.Count == 0)
+                {
+                    return;
+                }
+
                 _timer += Time.deltaTime;
                 if (_timer < UpdateIntervalSeconds)
                 {
@@ -292,23 +314,64 @@ namespace DragonAR.UI
             }
         }
 
-        // Cho phep keo ca bang dashboard di bat ky vi tri nao tren man hinh bang ngon tay -
-        // day la CACH DUY NHAT bang di chuyen (khong tu dong bam theo gi ca sau khi spawn).
+        // Keo tha bang ngon tay -> doi VI TRI THE GIOI THAT (transform.position cua
+        // canvas), khong phai vi tri tren man hinh. Cach lam: ban 1 tia tu camera qua diem
+        // dang cham, giao voi 1 mat phang huong ve camera di qua vi tri HIEN TAI cua canvas
+        // - lay diem giao do lam vi tri moi. Sau khi tha tay, panel dung yen (fix) dung tai
+        // toa do 3D moi vua tinh duoc.
         private sealed class DashboardDragHandler : MonoBehaviour, IDragHandler
         {
-            private RectTransform _rectTransform;
-            private Canvas _canvas;
+            private Transform _worldTransform;
+            private Camera _fallbackCamera;
 
-            private void Awake()
+            public void Init(Transform worldTransform, Camera fallbackCamera)
             {
-                _rectTransform = GetComponent<RectTransform>();
-                _canvas = GetComponentInParent<Canvas>();
+                _worldTransform = worldTransform;
+                _fallbackCamera = fallbackCamera;
             }
 
             public void OnDrag(PointerEventData eventData)
             {
-                var scale = _canvas != null && _canvas.scaleFactor > 0f ? _canvas.scaleFactor : 1f;
-                _rectTransform.anchoredPosition += eventData.delta / scale;
+                var cam = eventData.pressEventCamera != null ? eventData.pressEventCamera : _fallbackCamera;
+                if (cam == null || _worldTransform == null)
+                {
+                    return;
+                }
+
+                var ray = cam.ScreenPointToRay(eventData.position);
+                var plane = new Plane(-cam.transform.forward, _worldTransform.position);
+                if (plane.Raycast(ray, out var distanceAlongRay))
+                {
+                    _worldTransform.position = ray.GetPoint(distanceAlongRay);
+                }
+            }
+        }
+
+        // Luon xoay panel ve phia camera (chi quanh truc dung) de doc duoc du nguoi dung
+        // dung o goc nao quanh no - giong 1 man hinh AR lo lung thuc su.
+        private sealed class BillboardToCamera : MonoBehaviour
+        {
+            private void LateUpdate()
+            {
+                var camera = Camera.main;
+                if (camera == null)
+                {
+                    return;
+                }
+
+                // World Space Canvas hien noi dung khi nguoi xem dung o phia -Z nhin ve +Z
+                // (khong phai nguoc lai) - dung "huong ra xa camera" (tu camera toi panel,
+                // keo dai them) lam forward, KHONG PHAI "huong ve camera", neu khong chu se
+                // bi lat guong (da xac nhan qua anh chup thuc te: "ENVIRONMENT" hien thanh
+                // "TNEMNORIVNE").
+                var directionAwayFromCamera = transform.position - camera.transform.position;
+                directionAwayFromCamera.y = 0f;
+                if (directionAwayFromCamera.sqrMagnitude < 0.0001f)
+                {
+                    return;
+                }
+
+                transform.rotation = Quaternion.LookRotation(directionAwayFromCamera.normalized, Vector3.up);
             }
         }
     }

@@ -3,124 +3,69 @@ using UnityEngine;
 
 namespace DragonAR.Creature
 {
-    // Spawn 2 con rong 2 ben be mat da phat hien, chua khoang trong o giua cho item chinh.
-    // Kich thuoc/khoang cach tu dieu chinh theo kich thuoc THAT cua be mat (responsive),
-    // gioi han trong khoang Min/Max de khong qua nho/qua to so voi khung hinh camera.
+    // Spawn 1 con rong DUY NHAT, GAN THEO CAMERA (khong can AR plane detection) - luon
+    // dung yen truoc mat camera o 1 khoang cach/offset co dinh, du nguoi dung xoay dien
+    // thoai huong nao (camera-relative). Model la file glb AI-generated tu anh mascot tham
+    // chieu (img-mascos-1.png, xem Assets/img-mascos-1.png o goc workspace) - da kiem tra
+    // qua glTF JSON: 0 skins, 0 animations (mesh tinh, chua rig/animate), nen dung hieu ung
+    // "lac lu tai cho" (xoay qua lai theo song sin) thay vi Animator that.
+    //
+    // LICH SU: truoc day co logic spawn 2 con rong tren mat phang AR phat hien duoc
+    // (SpawnTwoDragons, dung model FBX BGE_Dragon_2.7_Animation_Only co animation that,
+    // responsive theo kich thuoc mat phang, hanh vi "tuong tac" quay mat nhin nhau) - DA
+    // XOA HOAN TOAN theo yeu cau don gian hoa app ve 1 con rong duy nhat dung dung model
+    // AI-generated moi. Neu can animation that cho model nay sau nay, phai rig/animate no
+    // truoc (Blender, hoac Unity AI RigMesh/GenerateHumanoidAnimation neu co model kha
+    // dung - xem context/OPEN_QUESTIONS.md).
     public static class DragonSpawner
     {
-        private const string ModelResourcePath = "BGE_Dragon_2.7_Animation_Only";
-        private const string ControllerResourcePath = "BGE_Dragon_2.7_Animation_Only";
-        private const string BaseAnimatorStateName = "Armature|Run_New";
+        private const string ModelResourcePath = "MascotModel";
 
-        // Thu tu phoi hop 4 animation co san trong file, lap lai vo han.
-        private static readonly string[] AnimationOrder =
-        {
-            "Armature|Fly_New",
-            "Armature|Walk_New",
-            "Armature|Run_New",
-            "Armature|Idel_New",
-        };
+        private const float RotationDegreesPerSecond = 40f;
 
-        private const float SecondsPerAnimation = 4f;
-
-        private const float VisualSizeFractionOfPlane = 1.4f; // % canh nho hon cua be mat dung lam kich thuoc rong
-        private const float MinVisualSize = 0.8f; // met
-        private const float MaxVisualSize = 8f; // met
-
-        private const float SideOffsetFractionOfPlaneWidth = 0.16f; // % chieu rong be mat dung lam khoang cach tam
-        private const float MinSideOffsetMultiplierOfSize = 0.35f; // toi thieu = % kich thuoc rong, tranh 2 con de len nhau
-        private const float MaxSideOffset = 1.6f; // met
-
-        public static DragonSpawnResult SpawnTwoDragons(TrackableSurfaceInfo surface)
-        {
-            ComputeResponsiveSizing(surface.Size, out var visualSize, out var sideOffset);
-
-            var leftPivot = SpawnOneDragon(surface, -surface.RightAxis * sideOffset, visualSize, startAnimationIndex: 0);
-            var rightPivot = SpawnOneDragon(surface, surface.RightAxis * sideOffset, visualSize, startAnimationIndex: 2);
-
-            if (leftPivot != null && rightPivot != null)
-            {
-                var leftController = leftPivot.GetComponent<CreatureAnimationController>();
-                var rightController = rightPivot.GetComponent<CreatureAnimationController>();
-                leftController.SetInteractionPartner(rightPivot.transform, surface.Center);
-                rightController.SetInteractionPartner(leftPivot.transform, surface.Center);
-            }
-
-            Debug.Log($"[DragonSpawner] Da spawn 2 con rong 2 ben be mat tai {surface.Center} " +
-                      $"(be mat {surface.Size.x:F2}x{surface.Size.y:F2}m -> rong {visualSize:F2}m, cach tam {sideOffset:F2}m).");
-
-            return new DragonSpawnResult(leftPivot, rightPivot, visualSize);
-        }
-
-        // Tinh kich thuoc rong va khoang cach tam theo kich thuoc THAT cua be mat vua phat
-        // hien (don vi met).
-        private static void ComputeResponsiveSizing(Vector2 planeSize, out float visualSize, out float sideOffset)
-        {
-            var planeSpan = Mathf.Min(planeSize.x, planeSize.y);
-            visualSize = Mathf.Clamp(planeSpan * VisualSizeFractionOfPlane, MinVisualSize, MaxVisualSize);
-
-            var rawOffset = planeSize.x * SideOffsetFractionOfPlaneWidth;
-            var minOffset = visualSize * MinSideOffsetMultiplierOfSize;
-            sideOffset = Mathf.Clamp(rawOffset, minOffset, MaxSideOffset);
-        }
-
-        private static GameObject SpawnOneDragon(TrackableSurfaceInfo surface, Vector3 worldOffset, float visualSize, int startAnimationIndex)
-        {
-            var dragonAsset = Resources.Load<GameObject>(ModelResourcePath);
-            if (dragonAsset == null)
-            {
-                Debug.LogError($"[DragonSpawner] Khong tim thay model tai Resources/{ModelResourcePath}.fbx");
-                return null;
-            }
-
-            var pivot = new GameObject($"Dragon_Pivot_{startAnimationIndex}");
-            var dragon = Object.Instantiate(dragonAsset, pivot.transform);
-            dragon.name = "Dragon";
-
-            BoundsScaler.ScaleToFitAndAlignBottom(dragon, visualSize);
-
-            pivot.transform.position = surface.Center + worldOffset;
-            pivot.transform.rotation = FaceTowardUser(pivot.transform.position, surface.Normal);
-
-            var controller = pivot.AddComponent<CreatureAnimationController>();
-            controller.Init(dragon, ModelResourcePath, ControllerResourcePath, BaseAnimatorStateName, AnimationOrder, SecondsPerAnimation, startAnimationIndex);
-
-            return pivot;
-        }
-
-        // Quay mat rong ve phia camera (nguoi dung) tai thoi diem spawn - chieu huong xuong
-        // be mat (bo phan vuong goc voi normal) de rong khong bi nga/nghieng.
-        private static Quaternion FaceTowardUser(Vector3 dragonPosition, Vector3 surfaceNormal)
+        public static GameObject SpawnAttachedToCamera(Vector3 localOffsetFromCamera, float visualSize = 0.55f)
         {
             var camera = Camera.main;
             if (camera == null)
             {
-                return Quaternion.identity;
+                Debug.LogError("[DragonSpawner] No main camera found, cannot spawn camera-attached dragon.");
+                return null;
             }
 
-            var directionToUser = camera.transform.position - dragonPosition;
-            directionToUser = Vector3.ProjectOnPlane(directionToUser, surfaceNormal);
-
-            if (directionToUser.sqrMagnitude < 0.0001f)
+            var dragonAsset = Resources.Load<GameObject>(ModelResourcePath);
+            if (dragonAsset == null)
             {
-                return Quaternion.identity;
+                Debug.LogError($"[DragonSpawner] Model not found at Resources/{ModelResourcePath}.");
+                return null;
             }
 
-            return Quaternion.LookRotation(directionToUser.normalized, surfaceNormal);
+            var pivot = new GameObject("Dragon_CameraPreview");
+            var dragon = Object.Instantiate(dragonAsset, pivot.transform);
+            dragon.name = "Dragon";
+
+            BoundsScaler.ScaleToFitAndCenter(dragon, visualSize);
+
+            pivot.transform.SetParent(camera.transform, worldPositionStays: false);
+            pivot.transform.localPosition = localOffsetFromCamera;
+            // Khong xoay 180 do nua - model nay (AI-generated tu anh mascot) co "forward"
+            // rieng cua no khac quy uoc thong thuong; 180 do lam mat quay LUNG ve phia
+            // camera (da xac nhan qua phan hoi thuc te). De 0 do la dung huong.
+            pivot.transform.localRotation = Quaternion.identity;
+
+            pivot.AddComponent<SpinInPlace>();
+
+            return pivot;
         }
-    }
 
-    public readonly struct DragonSpawnResult
-    {
-        public GameObject LeftPivot { get; }
-        public GameObject RightPivot { get; }
-        public float VisualSize { get; }
-
-        public DragonSpawnResult(GameObject leftPivot, GameObject rightPivot, float visualSize)
+        // Xoay tron lien tuc quanh truc dung, khong dich chuyen vi tri - "xoay tai cho" de
+        // xem duoc model tu moi goc. Chi la hieu ung tam thoi cho toi khi model co
+        // rig/animation that (xem ghi chu dau file).
+        private sealed class SpinInPlace : MonoBehaviour
         {
-            LeftPivot = leftPivot;
-            RightPivot = rightPivot;
-            VisualSize = visualSize;
+            private void Update()
+            {
+                transform.Rotate(Vector3.up, RotationDegreesPerSecond * Time.deltaTime, Space.Self);
+            }
         }
     }
 }
