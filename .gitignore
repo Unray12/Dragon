@@ -183,6 +183,8 @@ Assets/Resources/ThingsBoardConfig.asset.meta
 # Ảnh render thử (render_00..render_22) và ảnh debug — 44MB, sinh lại được
 3D-Model/**/render_*.png
 3D-Model/**/probe_*.png
+3D-Model/**/posetest_*.png
+3D-Model/**/anim_*.png
 3D-Model/**/_*.png
 
 # Các bản texture nháp giữa chừng (tex_basecolor_clean/fixed/sharp/final...).
