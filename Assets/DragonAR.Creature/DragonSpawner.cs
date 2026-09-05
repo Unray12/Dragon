@@ -5,23 +5,30 @@ namespace DragonAR.Creature
 {
     // Spawn 1 con rong DUY NHAT, GAN THEO CAMERA (khong can AR plane detection) - luon
     // dung yen truoc mat camera o 1 khoang cach/offset co dinh, du nguoi dung xoay dien
-    // thoai huong nao (camera-relative). Model la file glb AI-generated tu anh mascot tham
-    // chieu (img-mascos-1.png, xem Assets/img-mascos-1.png o goc workspace) - da kiem tra
-    // qua glTF JSON: 0 skins, 0 animations (mesh tinh, chua rig/animate), nen dung hieu ung
-    // "lac lu tai cho" (xoay qua lai theo song sin) thay vi Animator that.
+    // thoai huong nao (camera-relative).
     //
-    // LICH SU: truoc day co logic spawn 2 con rong tren mat phang AR phat hien duoc
-    // (SpawnTwoDragons, dung model FBX BGE_Dragon_2.7_Animation_Only co animation that,
-    // responsive theo kich thuoc mat phang, hanh vi "tuong tac" quay mat nhin nhau) - DA
-    // XOA HOAN TOAN theo yeu cau don gian hoa app ve 1 con rong duy nhat dung dung model
-    // AI-generated moi. Neu can animation that cho model nay sau nay, phai rig/animate no
-    // truoc (Blender, hoac Unity AI RigMesh/GenerateHumanoidAnimation neu co model kha
-    // dung - xem context/OPEN_QUESTIONS.md).
+    // Model: prefab PF_Dragon (Assets/Art/Creatures/Dragon/Resources/) - mesh CH_Dragon.fbx
+    // export tu 3D-Model/Dragon-AI/Untitled.blend (20.570 tris, da bo modifier Subdiv vi
+    // level 2 = ~320k tris, vuot xa ngan sach mobile AR), material M_Dragon_Body (URP Lit)
+    // dung 2 texture bake tu node graph Blender: T_Dragon_Albedo (2K, da ap Hue/Sat +
+    // Brightness/Contrast) va T_Dragon_MetallicSmoothness (1K, R=metallic tu gold mask,
+    // A=smoothness).
+    //
+    // Model KHONG co rig/animation (0 skins, 0 animations) - day la mesh tinh. Chuyen dong
+    // duy nhat la CreatureTurntable (xoay tron 360 do tai cho bang code) - khong phai
+    // animation that. Muon chuyen dong that thi phai rig/animate trong Blender truoc.
     public static class DragonSpawner
     {
-        private const string ModelResourcePath = "MascotModel";
+        private const string PrefabResourcePath = "PF_Dragon";
 
-        private const float RotationDegreesPerSecond = 40f;
+        // Goc BAT DAU cua vong xoay 360 (CreatureTurntable se xoay tiep tu day). DA KIEM
+        // CHUNG bang anh chup Scene View trong Unity voi dung pipeline export nay (FBX,
+        // bake_space_transform, axis -Z/+Y):
+        // 0 do  = mat huong VE camera (dung)
+        // 180 do = quay LUNG ve camera
+        // Model AI-generated nay co "forward" nguoc quy uoc thong thuong, nen KHONG duoc
+        // suy dien 180 do tu thoi quen Blender->Unity - phai nhin anh chup that.
+        private const float SpawnYawDegrees = 0f;
 
         public static GameObject SpawnAttachedToCamera(Vector3 localOffsetFromCamera, float visualSize = 0.55f)
         {
@@ -32,10 +39,10 @@ namespace DragonAR.Creature
                 return null;
             }
 
-            var dragonAsset = Resources.Load<GameObject>(ModelResourcePath);
+            var dragonAsset = Resources.Load<GameObject>(PrefabResourcePath);
             if (dragonAsset == null)
             {
-                Debug.LogError($"[DragonSpawner] Model not found at Resources/{ModelResourcePath}.");
+                Debug.LogError($"[DragonSpawner] Prefab not found at Resources/{PrefabResourcePath}.");
                 return null;
             }
 
@@ -43,29 +50,17 @@ namespace DragonAR.Creature
             var dragon = Object.Instantiate(dragonAsset, pivot.transform);
             dragon.name = "Dragon";
 
+            // Can TAM (khong phai day) vi con rong lo lung truoc camera, khong dung tren
+            // mat phang nao.
             BoundsScaler.ScaleToFitAndCenter(dragon, visualSize);
 
             pivot.transform.SetParent(camera.transform, worldPositionStays: false);
             pivot.transform.localPosition = localOffsetFromCamera;
-            // Khong xoay 180 do nua - model nay (AI-generated tu anh mascot) co "forward"
-            // rieng cua no khac quy uoc thong thuong; 180 do lam mat quay LUNG ve phia
-            // camera (da xac nhan qua phan hoi thuc te). De 0 do la dung huong.
-            pivot.transform.localRotation = Quaternion.identity;
+            pivot.transform.localRotation = Quaternion.Euler(0f, SpawnYawDegrees, 0f);
 
-            pivot.AddComponent<SpinInPlace>();
+            pivot.AddComponent<CreatureTurntable>();
 
             return pivot;
-        }
-
-        // Xoay tron lien tuc quanh truc dung, khong dich chuyen vi tri - "xoay tai cho" de
-        // xem duoc model tu moi goc. Chi la hieu ung tam thoi cho toi khi model co
-        // rig/animation that (xem ghi chu dau file).
-        private sealed class SpinInPlace : MonoBehaviour
-        {
-            private void Update()
-            {
-                transform.Rotate(Vector3.up, RotationDegreesPerSecond * Time.deltaTime, Space.Self);
-            }
         }
     }
 }

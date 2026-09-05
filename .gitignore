@@ -80,6 +80,10 @@ mono_crash.*
 *.unitypackage
 *.unitypackage.meta
 *.app
+# Assets/DragonAR.App/ la MODULE C# cua project, khong phai bundle .app cua macOS -
+# khong co dong duoi day thi ca folder bi "*.app" nuot, AppBootstrapper khong bao gio
+# duoc commit va app clone ve se khong spawn gi ca.
+!Assets/DragonAR.App/
 
 # Crashlytics generated file
 crashlytics-build.properties
@@ -106,12 +110,31 @@ InitTestScene*.unity*
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
 
+# ============================================================================
 # --- Bổ sung riêng cho project này ---
+# ============================================================================
 
-# Unity 6 / newer IDE tooling generates .slnx (not covered by the *.sln pattern above)
-*.slnx
+# --- IDE / OS ---
+*.slnx            # Unity 6 sinh .slnx, pattern *.sln ở trên KHÔNG bắt được
+.idea/            # Rider
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# Android/iOS signing keys — không bao giờ commit key ký app
+# --- Crash dump / báo cáo lỗi ---
+*.dmp
+*.stackdump
+
+# --- Node (nếu sau này thêm service chụp ảnh kiosk bằng Playwright) ---
+node_modules/
+
+# ============================================================================
+# SECRETS — không bao giờ commit
+# ============================================================================
+
+# Key ký app
 *.keystore
 *.keystore.meta
 *.jks
@@ -119,14 +142,62 @@ InitTestScene*.unity*
 *.mobileprovision
 *.p8
 
-# Firebase/Google Services config (nếu thêm sau này) — chứa thông tin theo từng máy/môi trường
+# Firebase / Google Services (nếu thêm sau)
 google-services.json
 GoogleService-Info.plist
 
-# Biến môi trường/secrets cục bộ
+# Biến môi trường. LƯU Ý: .env.example (bản mẫu rỗng) VẪN ĐƯỢC commit,
+# vì các dòng dưới là khớp chính xác chứ không phải .env.*
 .env
 .env.local
 
-# OS cruft
-.DS_Store
-Thumbs.db
+# Cấu hình ThingsBoard lúc chạy — chứa JWT/username/password, mỗi máy tự tạo
+# (Assets > Create > DragonAR > ThingsBoard Config)
+Assets/Resources/ThingsBoardConfig.asset
+Assets/Resources/ThingsBoardConfig.asset.meta
+
+# ============================================================================
+# BUILD OUTPUT
+# ============================================================================
+
+# Tên là "ApkFiles" nhưng thực tế là bản build Windows ~100MB
+# (Dragon.exe, DirectML.dll, Dragon_Data/, MonoBleedingEdge/...)
+/ApkFiles/
+/Builds/
+
+# ============================================================================
+# 3D-Model/ — thư mục làm việc Blender
+#
+# Chỉ giữ NGUỒN, bỏ phụ phẩm. Đây là blacklist (bỏ thứ đã biết là rác) chứ
+# KHÔNG phải whitelist — file mới thêm vào sẽ được commit theo mặc định.
+# Cố ý làm vậy: whitelist chính là kiểu bẫy đã làm mất Assets/DragonAR.App/.
+#
+# GIỮ LẠI: Untitled.blend (nguồn thật của con rồng), tex_*_2k.png (2 texture
+# mà .blend đang trỏ tới), model-*.glb (bản AI gốc), Dragon.jpg (ảnh tham
+# chiếu), hdri/ (môi trường để mở .blend lên là render được ngay).
+# ============================================================================
+
+# Bộ nhớ tạm numpy của lần sửa texture — 97MB, không tái dùng
+3D-Model/**/*.npy
+
+# Ảnh render thử (render_00..render_22) và ảnh debug — 44MB, sinh lại được
+3D-Model/**/render_*.png
+3D-Model/**/probe_*.png
+3D-Model/**/_*.png
+
+# Các bản texture nháp giữa chừng (tex_basecolor_clean/fixed/sharp/final...).
+# CHỈ bản _2k là bản .blend thật sự dùng -> giữ lại.
+# Nếu sau này có texture nguồn mới KHÔNG đặt tên _2k thì phải thêm ngoại lệ ở đây.
+3D-Model/**/tex_*.png
+!3D-Model/**/tex_*_2k.png
+
+# ============================================================================
+# .claude/skills/ — commit hết, KHÔNG ignore gì
+#
+# Trước đây có blender-skills/ là git clone lồng bên trong (sẽ tạo gitlink hỏng
+# khi commit). Đã xoá hẳn vì 16 skill trong đó trùng byte-for-byte với các bản
+# ở cấp trên cùng. Muốn lấy bản mới từ upstream thì clone ra NGOÀI repo này:
+#   https://github.com/kevinbadi/blender-skills.git
+# rồi copy từng thư mục skill vào .claude/skills/ (phải nằm đúng 1 cấp thì
+# Claude Code mới nạp được).
+# ============================================================================

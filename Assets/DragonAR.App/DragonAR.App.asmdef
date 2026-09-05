@@ -1,0 +1,20 @@
+{
+    "name": "DragonAR.App",
+    "rootNamespace": "DragonAR.App",
+    "references": [
+        "DragonAR.Core",
+        "DragonAR.AR",
+        "DragonAR.Creature",
+        "DragonAR.UI",
+        "DragonAR.Telemetry"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
