@@ -33,15 +33,14 @@ namespace DragonAR.UI
         // Chu phai nam GON TRONG duong tron cua qua cau, khong duoc tran ra ngoai. Be rong
         // dung duoc cua 1 hinh tron ~ 0.7 lan duong kinh; 0.105*2*0.7 = 0.147m = 122 don vi
         // UI o ti le 0.0012 m/don vi.
+        private const string BubbleMaterialResourcePath = "M_Bubble";
+
         private const float LabelCanvasWidth = 122f;
         private const float LabelCanvasHeight = 122f;
         private const float WorldUnitsPerPixel = 0.0012f;
 
-        // Xanh luc dam bong nhu anh tham chieu: toi de chu trang noi bat, smoothness cao de
-        // bat highlight cua den moi truong (Light Estimation sau nay se lam no "thuoc ve"
-        // can phong).
+        // Chi dung cho duong rot ve URP Lit khi thieu M_Bubble; mau that nam trong material.
         private static readonly Color BubbleColor = new(0.016f, 0.121f, 0.078f, 1f);
-        private static readonly Color BubbleRimEmission = new(0.05f, 0.42f, 0.28f, 1f);
         private static readonly Color LabelInkColor = new(0.78f, 0.90f, 0.84f, 1f);
         private static readonly Color ValueInkColor = Color.white;
 
@@ -71,15 +70,25 @@ namespace DragonAR.UI
             ring.Init(source, metrics, bubbles);
         }
 
+        // Material that nam o Assets/Resources/M_Bubble.mat, dung shader DragonAR/BubbleWater
+        // (Fresnel rim + gon song + trong suot). PHAI load tu Resources chu khong Shader.Find:
+        // shader chi duoc tim bang ten luc runtime se bi loai khoi build neu khong co asset
+        // nao tham chieu toi no -> tren may that se ra qua cau mau hong.
+        //
+        // Thieu material thi rot ve URP Lit cho app van chay duoc, chi la mat hieu ung nuoc.
         private static Material CreateBubbleMaterial()
         {
-            var shader = Shader.Find("Universal Render Pipeline/Lit");
-            var material = new Material(shader);
+            var shared = Resources.Load<Material>(BubbleMaterialResourcePath);
+            if (shared != null)
+            {
+                return shared;
+            }
+
+            Debug.LogWarning($"[BubbleRing] Khong thay Resources/{BubbleMaterialResourcePath}, dung URP Lit thay the.");
+            var material = new Material(Shader.Find("Universal Render Pipeline/Lit"));
             material.SetColor("_BaseColor", BubbleColor);
             material.SetFloat("_Smoothness", 0.92f);
             material.SetFloat("_Metallic", 0.15f);
-            material.EnableKeyword("_EMISSION");
-            material.SetColor("_EmissionColor", BubbleRimEmission * 0.35f);
             return material;
         }
 

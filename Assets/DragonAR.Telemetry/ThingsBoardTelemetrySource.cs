@@ -65,8 +65,9 @@ namespace DragonAR.Telemetry
 
         private IEnumerator PollLoop()
         {
-            // AddComponent<T>() chay OnEnable NGAY, truoc khi nguoi goi kip Configure() -
-            // cho toi khi co cau hinh thay vi tu tat component (xem ghi chu o WebSnapshotSource).
+            // AddComponent<T>() chay OnEnable NGAY, truoc khi nguoi goi kip Configure().
+            // Cho toi khi co cau hinh thay vi tu tat component - neu tu tat thi Configure()
+            // goi sau cung vo nghia, coroutine khong bao gio chay (loi da gap that).
             while (_config == null || _keys == null || _keys.Length == 0)
             {
                 yield return null;

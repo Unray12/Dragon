@@ -23,27 +23,8 @@ namespace DragonAR.App
         private static readonly Vector3 DragonOffsetFromCamera = new(-0.30f, -0.10f, 1.10f);
         private const float DragonVisualSize = 0.55f;
 
-        // Khoang cach chung tu camera toi noi dung AR (con rong, vong bong bong, khung web).
-        private const float ContentForwardDistance = 1.10f;
-
         private const string ThingsBoardConfigResourcePath = "ThingsBoardConfig";
 
-        // Khung web dat ben TRAI con rong (dashboard o ben phai) - ca 3 cung nam trong tam
-        // nhin khi vua mo app. Panel nay cao (ti le doc 720x1280) nen ha thap it hon.
-        private const float WebPanelLeftOffset = 0.80f;
-        private const float WebPanelDownOffset = 0.05f;
-
-        // Endpoint tra ve ANH CHUP cua trang kiosk (PNG/JPG), khong phai trang HTML.
-        // Unity khong render duoc HTML - xem IWebSnapshotSource de biet ly do va cach thay
-        // bang Vuplex sau nay.
-        //
-        // Can tao route nay o portal Next.js (Playwright, cache ~5s):
-        //   GET /api/kiosk-shot.png -> chup https://dragoneden-portal.dsolution.net/kiosk
-        //
-        // Test tren may local truoc khi co endpoint that: chay Chrome headless ghi ra file
-        // roi "python -m http.server", doi hang duoi thanh http://localhost:8099/kiosk.png
-        private const string KioskSnapshotUrl = "https://dragoneden-portal.dsolution.net/api/kiosk-shot.png";
-        private const float KioskRefreshSeconds = 5f;
 
         // Chi so hien tren dashboard. Key phai TRUNG ten key tren ThingsBoard - danh sach
         // that cua tram cam bien (device 589cbae0-...): co2, humidity, light, noise, pm10,
@@ -78,11 +59,9 @@ namespace DragonAR.App
             DragonSpawner.SpawnAttachedToCamera(DragonOffsetFromCamera, DragonVisualSize);
 
             // Bong bong bay quanh con rong: gan theo camera o DUNG vi tri con rong, nhung
-            // KHONG lam con cua pivot con rong - pivot do dang tu xoay 360 (CreatureTurntable),
-            // lam con thi vong bong bong se bi keo theo vong xoay do.
+            // KHONG lam con cua pivot con rong - de vong quy dao cua bong bong doc lap voi
+            // moi chuyen dong cua chinh con rong.
             MetricBubbleRing.Spawn(camera.transform, DragonOffsetFromCamera, CreateTelemetrySource(), BubbleMetrics);
-
-            WebPanelOverlay.Spawn(ComputeWebPanelWorldPosition(camera), CreateWebSnapshotSource());
 
             // Core AR: van chay plane detection de biet khi nao co be mat that trong phong.
             // Hien noi dung khong phu thuoc ket qua nay (rong + dashboard da spawn ngay o
@@ -125,24 +104,6 @@ namespace DragonAR.App
             return simulated;
         }
 
-        private static IWebSnapshotSource CreateWebSnapshotSource()
-        {
-            var host = new GameObject("WebSnapshotSource");
-            Object.DontDestroyOnLoad(host);
-
-            var snapshots = host.AddComponent<WebSnapshotSource>();
-            snapshots.Configure(KioskSnapshotUrl, KioskRefreshSeconds);
-            return snapshots;
-        }
-
-        private static Vector3 ComputeWebPanelWorldPosition(Camera camera)
-        {
-            var t = camera.transform;
-            return t.position
-                   + t.forward * ContentForwardDistance
-                   - t.right * WebPanelLeftOffset
-                   + Vector3.down * WebPanelDownOffset;
-        }
 
     }
 }

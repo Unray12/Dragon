@@ -63,12 +63,46 @@ namespace DragonAR.Core
 
         private static Bounds CombinedBounds(Renderer[] renderers)
         {
-            var bounds = renderers[0].bounds;
+            var bounds = WorldBounds(renderers[0]);
             for (var i = 1; i < renderers.Length; i++)
             {
-                bounds.Encapsulate(renderers[i].bounds);
+                bounds.Encapsulate(WorldBounds(renderers[i]));
             }
             return bounds;
+        }
+
+        // SkinnedMeshRenderer.bounds la bounds DA DUOC NOI RONG de phu moi tu the animation,
+        // khong phai kich thuoc that cua model. Voi con rong: 1.19m noi rong so voi 0.92m
+        // that -> dung thang no de scale se lam model nho di ~29%. sharedMesh.bounds moi la
+        // kich thuoc that cua bind pose.
+        private static Bounds WorldBounds(Renderer renderer)
+        {
+            if (renderer is SkinnedMeshRenderer skinned && skinned.sharedMesh != null)
+            {
+                return TransformBounds(skinned.sharedMesh.bounds, renderer.transform.localToWorldMatrix);
+            }
+
+            return renderer.bounds;
+        }
+
+        // Bien doi bounds cuc bo sang the gioi bang cach doi 8 dinh hop roi bao lai - khong
+        // the nhan thang center/extents vi phep xoay lam hop khong con thang truc.
+        private static Bounds TransformBounds(Bounds local, Matrix4x4 matrix)
+        {
+            var c = local.center;
+            var e = local.extents;
+            var result = new Bounds(matrix.MultiplyPoint3x4(c + new Vector3(-e.x, -e.y, -e.z)), Vector3.zero);
+
+            for (var i = 1; i < 8; i++)
+            {
+                var corner = new Vector3(
+                    (i & 1) == 0 ? -e.x : e.x,
+                    (i & 2) == 0 ? -e.y : e.y,
+                    (i & 4) == 0 ? -e.z : e.z);
+                result.Encapsulate(matrix.MultiplyPoint3x4(c + corner));
+            }
+
+            return result;
         }
     }
 }
