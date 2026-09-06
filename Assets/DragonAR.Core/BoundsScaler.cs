@@ -10,30 +10,38 @@ namespace DragonAR.Core
     {
         // Can day cua bounding box (khong phai tam) trung voi goc toa do hien tai cua no -
         // dung khi can dat 1 vat the dung len tren mat phang thay vi lo lung nua chim nua
-        // noi.
-        public static void ScaleToFitAndAlignBottom(GameObject target, float targetLargestDimension)
+        // noi. Tra ve bounds THE GIOI sau khi scale+can - goi lai de biet vi tri day/dinh
+        // that (vd dat hieu ung duoi chan).
+        public static Bounds ScaleToFitAndAlignBottom(GameObject target, float targetLargestDimension)
         {
             if (!TryScale(target, targetLargestDimension, out var scaledBounds))
             {
-                return;
+                return default;
             }
 
             var bottomCenter = new Vector3(scaledBounds.center.x, scaledBounds.min.y, scaledBounds.center.z);
             var worldOffset = target.transform.position - bottomCenter;
             target.transform.position += worldOffset;
+
+            scaledBounds.center += worldOffset;
+            return scaledBounds;
         }
 
         // Can TAM cua bounding box trung voi goc toa do hien tai - dung khi vat the lo
-        // lung (vd gan theo camera), khong dung tren be mat nao.
-        public static void ScaleToFitAndCenter(GameObject target, float targetLargestDimension)
+        // lung (vd gan theo camera), khong dung tren be mat nao. Tra ve bounds THE GIOI sau
+        // khi scale+can.
+        public static Bounds ScaleToFitAndCenter(GameObject target, float targetLargestDimension)
         {
             if (!TryScale(target, targetLargestDimension, out var scaledBounds))
             {
-                return;
+                return default;
             }
 
             var worldOffset = target.transform.position - scaledBounds.center;
             target.transform.position += worldOffset;
+
+            scaledBounds.center += worldOffset;
+            return scaledBounds;
         }
 
         private static bool TryScale(GameObject target, float targetLargestDimension, out Bounds scaledBounds)
