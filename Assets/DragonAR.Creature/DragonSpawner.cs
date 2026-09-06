@@ -3,46 +3,32 @@ using UnityEngine;
 
 namespace DragonAR.Creature
 {
-    // Spawn 1 con rong DUY NHAT, GAN THEO CAMERA (khong can AR plane detection) - luon
-    // dung yen truoc mat camera o 1 khoang cach/offset co dinh, du nguoi dung xoay dien
-    // thoai huong nao (camera-relative).
+    // Spawn 1 con rong DUY NHAT, NEO CO DINH vao 1 toa do that trong khong gian AR.
     //
-    // Model: prefab PF_Dragon (Assets/Art/Creatures/Dragon/Resources/) - mesh CH_Dragon_Rigged.fbx
-    // export tu 3D-Model/Dragon-AI/Dragon_Rigged.blend (20.570 tris, da bo modifier Subdiv vi
-    // level 2 = ~320k tris, vuot xa ngan sach mobile AR), material M_Dragon_Body (URP Lit)
-    // dung 2 texture bake tu node graph Blender: T_Dragon_Albedo (2K, da ap Hue/Sat +
-    // Brightness/Contrast) va T_Dragon_MetallicSmoothness (1K, R=metallic tu gold mask,
-    // A=smoothness).
+    // KHONG con gan theo camera nhu ban truoc: con rong dung yen tai cho, nguoi dung di
+    // chuyen hay xoay dien thoai thi no van nam nguyen do - dung nhu 1 vat the that trong
+    // phong. Viec giu no khong bi TROI khi AR hieu chinh lai ban do la viec cua
+    // ArAnchorService (DragonAR.AR), khong phai cua lop nay.
+    //
+    // Model: prefab PF_Dragon (Assets/Art/Creatures/Dragon/Resources/) - mesh
+    // CH_Dragon_Rigged.fbx export tu 3D-Model/Dragon-AI/Dragon_Rigged.blend (20.570 tris, da
+    // bo modifier Subdiv vi level 2 = ~320k tris, vuot xa ngan sach mobile AR), material
+    // M_Dragon_Body (URP Lit) dung 2 texture bake tu node graph Blender.
     //
     // Model DA CO RIG (13 xuong) va animation that, lam trong Blender:
     //   Hover - bong benh 1 nhip, duoi tre pha, chan lung lang  (state mac dinh)
     //   Idle  - tho 2 nhip, song duoi, dau ngo nhe
     // Ca 2 clip deu loop kin (frame dau trung frame cuoi tuyet doi). Animator + controller
     // AC_Dragon nam san tren prefab PF_Dragon, nen o day khong phai lam gi them.
-    //
-    // CreatureTurntable (xoay tron 360 bang code) DA XOA - do la chuyen dong gia dung tam
-    // khi chua co rig; giu lai se chong len animation that.
     public static class DragonSpawner
     {
         private const string PrefabResourcePath = "PF_Dragon";
 
-        // Goc xoay quanh truc dung luc spawn. DA KIEM CHUNG bang anh chup thuc te trong
-        // Unity:
-        // 0 do  = mat huong VE camera (dung)
-        // 180 do = quay LUNG ve camera
-        // Model AI-generated nay co "forward" nguoc quy uoc thong thuong, nen KHONG duoc
-        // suy dien 180 do tu thoi quen Blender->Unity - phai nhin anh chup that.
-        private const float SpawnYawDegrees = 0f;
-
-        public static GameObject SpawnAttachedToCamera(Vector3 localOffsetFromCamera, float visualSize = 0.55f)
+        // Neo con rong tai worldPosition, quay mat ve phia nguoi dang nhin (viewerPosition).
+        // Sau khi spawn, pivot KHONG bao gio duoc dat lai vi tri hay huong nua.
+        public static GameObject SpawnAnchored(Vector3 worldPosition, Vector3 viewerPosition,
+            float visualSize = 0.55f)
         {
-            var camera = Camera.main;
-            if (camera == null)
-            {
-                Debug.LogError("[DragonSpawner] No main camera found, cannot spawn camera-attached dragon.");
-                return null;
-            }
-
             var dragonAsset = Resources.Load<GameObject>(PrefabResourcePath);
             if (dragonAsset == null)
             {
@@ -50,19 +36,30 @@ namespace DragonAR.Creature
                 return null;
             }
 
-            var pivot = new GameObject("Dragon_CameraPreview");
+            var pivot = new GameObject("Dragon_Anchored");
             var dragon = Object.Instantiate(dragonAsset, pivot.transform);
             dragon.name = "Dragon";
 
-            // Can TAM (khong phai day) vi con rong lo lung truoc camera, khong dung tren
+            // Can TAM (khong phai day) vi con rong lo lung ngang tam nhan, khong dung tren
             // mat phang nao.
             BoundsScaler.ScaleToFitAndCenter(dragon, visualSize);
 
-            pivot.transform.SetParent(camera.transform, worldPositionStays: false);
-            pivot.transform.localPosition = localOffsetFromCamera;
-            pivot.transform.localRotation = Quaternion.Euler(0f, SpawnYawDegrees, 0f);
-
+            pivot.transform.position = worldPosition;
+            pivot.transform.rotation = FacingRotation(worldPosition, viewerPosition);
             return pivot;
+        }
+
+        // DA KIEM CHUNG bang anh chup thuc te: model AI-generated nay hien dung MAT khi
+        // "forward" cua pivot huong RA XA nguoi xem (cung quy uoc voi WorldPanelBillboard).
+        // KHONG duoc suy dien 180 do tu thoi quen Blender->Unity - da tung sai vi doan.
+        private static Quaternion FacingRotation(Vector3 worldPosition, Vector3 viewerPosition)
+        {
+            var away = worldPosition - viewerPosition;
+            away.y = 0f;   // chi xoay quanh truc dung, khong cho con rong nga truoc/sau
+
+            return away.sqrMagnitude < 0.0001f
+                ? Quaternion.identity
+                : Quaternion.LookRotation(away.normalized, Vector3.up);
         }
     }
 }

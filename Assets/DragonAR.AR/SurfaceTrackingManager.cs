@@ -150,16 +150,23 @@ namespace DragonAR.AR
             return projectedRight.sqrMagnitude > 0.0001f ? projectedRight.normalized : plane.transform.right;
         }
 
-        // Goi sau khi da dung noi dung len be mat - dung detect them mat phang moi va an het
-        // mesh/luoi highlight cua cac mat phang da phat hien, de UI sach hon.
+        // Goi sau khi da dung noi dung len be mat - an het mesh/luoi highlight cua cac mat
+        // phang da phat hien, de UI sach hon.
+        //
+        // KHONG tat _planeManager.enabled: lam vay se buoc ARCore/ARKit XAY DUNG LAI toan
+        // bo ARSessionConfig cua phien (session phai enable/disable PlaneDetection feature),
+        // va viec cau hinh lai giua chung co nguy co lam GIAN DOAN ca AugmentedImage tracking
+        // dang chay song song tren CUNG 1 session - da xac nhan qua log logcat thuc te tren
+        // thiet bi that: dia chi con tro AugmentedImageDatabase doi khac giua phien dung 1
+        // lan, dung vao thoi diem StopDetectionAndHideVisuals duoc goi (~5s sau khi thay mat
+        // phang dau tien). Chi can an GameObject cua tung plane la du sach UI, khong can tat
+        // ca manager.
         public void StopDetectionAndHideVisuals()
         {
             foreach (var plane in _planeManager.trackables)
             {
                 plane.gameObject.SetActive(false);
             }
-
-            _planeManager.enabled = false;
         }
     }
 }
