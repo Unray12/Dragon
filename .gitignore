@@ -194,12 +194,14 @@ Assets/Resources/ThingsBoardConfig.asset.meta
 !3D-Model/**/tex_*_2k.png
 
 # ============================================================================
-# .claude/skills/ — commit hết, KHÔNG ignore gì
+# Cấu hình/agent tooling + tài liệu nội bộ — KHÔNG đẩy lên GitHub
 #
-# Trước đây có blender-skills/ là git clone lồng bên trong (sẽ tạo gitlink hỏng
-# khi commit). Đã xoá hẳn vì 16 skill trong đó trùng byte-for-byte với các bản
-# ở cấp trên cùng. Muốn lấy bản mới từ upstream thì clone ra NGOÀI repo này:
-#   https://github.com/kevinbadi/blender-skills.git
-# rồi copy từng thư mục skill vào .claude/skills/ (phải nằm đúng 1 cấp thì
-# Claude Code mới nạp được).
+# .claude/ (skill, agent config), .mcp.json (cấu hình MCP server — có thể chứa
+# path/token máy cục bộ), context/ và docs/ (ghi chú làm việc nội bộ, không
+# phải tài liệu sản phẩm) đều là công cụ/ghi chú riêng của máy dev, không phải
+# nguồn của app. Giữ local, mỗi máy tự có bản riêng.
 # ============================================================================
+.claude/
+.mcp.json
+context/
+docs/
