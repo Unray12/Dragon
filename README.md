@@ -1,146 +1,299 @@
-# Dragon AR App
+# Dragon AR
 
-App mobile AR: mở camera, nhận diện 1 vật thể mục tiêu, con rồng 3D xuất hiện và chuyển
-động quanh vật thể đó.
+A mobile augmented-reality client for the **Dragon Eden** environmental monitoring network.
+Scanning a printed marker affixed to a monitoring station spawns a rigged 3D dragon that
+stays world-anchored beside the station while orbiting bubbles render live sensor readings
+pulled from ThingsBoard.
 
-- Kiến trúc & luồng dữ liệu: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Mô tả từng module: [docs/MODULES.md](docs/MODULES.md)
-- Chức năng chi tiết: [docs/FEATURES.md](docs/FEATURES.md)
-- Công nghệ/version cụ thể: [docs/TECH_STACK.md](docs/TECH_STACK.md)
-- Trạng thái hiện tại & việc tiếp theo: [context/STATUS.md](context/STATUS.md)
+Built with Unity 6 and AR Foundation 6, targeting Android (ARCore) and iOS (ARKit).
 
 ---
 
-## 1. Yêu cầu cài đặt
+## 1. Runtime behavior
 
-| Thành phần | Ghi chú |
+The application starts with an empty camera feed — nothing is rendered until a marker is
+recognized. The sequence is:
+
+1. `AppBootstrapper` runs automatically via `[RuntimeInitializeOnLoadMethod]`. No scene
+   wiring is required; the composition root is code-driven rather than prefab-driven.
+2. `ImageTargetTrackingManager` attaches an `ARTrackedImageManager` and waits for the
+   reference image to be detected.
+3. On first detection, the dragon is placed **0.55 m to the viewer's right of the marker**,
+   at the marker's own height. "Right" is derived from the camera-to-marker vector via
+   `Vector3.Cross(Vector3.up, towardMarker)` rather than from the tracked image's local
+   axes, because ARCore and ARKit do not agree on tracked-image axis conventions.
+4. The spawned pivot receives an `ARAnchor` so it remains fixed to the spatial map as
+   tracking refines. The dragon does not follow the camera.
+5. A ring of metric bubbles is parented to the dragon pivot and begins polling telemetry.
+6. Plane detection runs in parallel; once a surface is resolved, detection stops and the
+   plane visualization is hidden to keep the frame clean.
+
+When the scene contains no `ARTrackedImageManager` — for example an Editor test scene — the
+dragon spawns directly in front of the camera instead, so creature behavior can be iterated
+without a marker.
+
+---
+
+## 2. Technology stack
+
+| Component | Version | Notes |
+|---|---|---|
+| Unity Editor | **6000.5.8f1** | Pinned in `ProjectSettings/ProjectVersion.txt`. Other versions trigger reimport warnings. |
+| AR Foundation | 6.5.0 | Provider-agnostic AR API surface |
+| ARCore XR Plugin | 6.5.0 | Android provider |
+| ARKit XR Plugin | 6.5.0 | iOS provider |
+| XR Plug-in Management | 4.6.0 | Provider loader configuration |
+| Universal Render Pipeline | 17.5.0 | Custom shaders are URP-specific |
+| XR Interaction Toolkit | 3.5.1 | Sample assets only |
+| Android Logcat | 1.4.7 | On-device log capture |
+| Newtonsoft JSON | via package | ThingsBoard response parsing |
+
+---
+
+## 3. Architecture
+
+Code is split into six assembly definitions enforcing a strict one-way dependency graph.
+Feature modules never reference one another; they communicate only through contracts
+declared in `DragonAR.Core` and through Unity types such as `Pose`.
+
+```
+                    DragonAR.App          (composition root)
+                          |
+        +-----------------+-----------------+-----------------+
+        |                 |                 |                 |
+  DragonAR.AR      DragonAR.Creature  DragonAR.Telemetry  DragonAR.UI
+        |                 |                 |                 |
+        +-----------------+--------+--------+-----------------+
+                                   |
+                            DragonAR.Core     (no dependencies)
+```
+
+| Assembly | Responsibility | External references |
+|---|---|---|
+| `DragonAR.Core` | Shared contracts and geometry helpers: `ITelemetrySource`, `TelemetrySample`, `TelemetryHistory`, `TrackableSurfaceInfo`, `BoundsScaler` | none |
+| `DragonAR.AR` | AR Foundation adapters: `ImageTargetTrackingManager`, `SurfaceTrackingManager`, `ArAnchorService` | AR Foundation, AR Subsystems, XR Core Utils |
+| `DragonAR.Creature` | Dragon instantiation and ground-glow effect: `DragonSpawner`, `GroundGlowEffect` | Core only |
+| `DragonAR.Telemetry` | Sensor data sources: `ThingsBoardTelemetrySource`, `SimulatedTelemetrySource`, `ThingsBoardConfig` | Newtonsoft JSON |
+| `DragonAR.UI` | World-space presentation: `MetricBubbleRing`, `MetricDisplay`, `WorldPanelBillboard` | TextMeshPro, uGUI, Input System |
+| `DragonAR.App` | The only assembly permitted to reference all feature modules; owns startup wiring | all of the above |
+
+`DragonAR.App` is the single composition root. If that assembly is absent the project still
+compiles cleanly but renders nothing at runtime — a failure mode worth recognizing, since an
+overly broad `*.app` pattern in `.gitignore` previously excluded the entire folder from
+version control.
+
+### Component initialization convention
+
+Components added via `AddComponent` are configured through an explicit `Init()` or
+`Configure()` call rather than relying on serialized fields. Unity invokes `OnEnable`
+synchronously inside `AddComponent`, before the caller can assign any field, so
+initialization logic placed in `OnEnable` observes null dependencies. This pattern is
+applied consistently across `ImageTargetTrackingManager`, `ThingsBoardTelemetrySource`, and
+`SimulatedTelemetrySource`.
+
+---
+
+## 4. Repository layout
+
+```
+Assets/
+  DragonAR.Core/        shared contracts, no dependencies
+  DragonAR.AR/          AR Foundation adapters
+  DragonAR.Creature/    dragon spawning and effects
+  DragonAR.Telemetry/   ThingsBoard and simulated sources
+  DragonAR.UI/          world-space metric bubbles
+  DragonAR.App/         composition root
+  Art/
+    Creatures/Dragon/   FBX meshes, textures, material, animator, PF_Dragon prefab
+    Markers/            marker PNGs and DragonEdenImageLibrary.asset
+    Shaders/            S_BubbleWater.shader, S_GroundGlow.shader
+  Resources/            M_Bubble.mat, M_GroundGlow.mat
+  Scenes/SampleScene.unity
+3D-Model/Dragon-AI/     Blender sources (rig and animation authoring)
+tools/ar-marker-generator/   Python marker generator and quality scorer
+```
+
+`.claude/`, `.mcp.json`, `context/`, and `docs/` are intentionally excluded from version
+control. They contain local development tooling and working notes rather than application
+sources, and each machine maintains its own copy.
+
+### Shader note
+
+Both custom shaders are hand-written URP HLSL rather than Shader Graph assets, and their
+materials are committed under `Assets/Resources/`. Materials must exist as assets: a shader
+referenced only through `Shader.Find()` is removed by shader stripping in IL2CPP builds and
+renders magenta on device.
+
+---
+
+## 5. Telemetry configuration
+
+`AppBootstrapper` loads `Resources/ThingsBoardConfig`. When the asset is present and
+complete, readings come from the live server; otherwise the application falls back to
+`SimulatedTelemetrySource` and remains fully functional offline.
+
+Create the asset via **Assets → Create → DragonAR → ThingsBoard Config** at
+`Assets/Resources/ThingsBoardConfig.asset`. It is gitignored because it holds credentials.
+`.env.example` at the repository root documents the expected fields.
+
+| Field | Purpose |
 |---|---|
-| **Unity Hub** | [unity.com/download](https://unity.com/download) |
-| **Unity Editor 6000.5.8f1** | Cài đúng version này qua Unity Hub (Installs → Install Editor) — project khoá version này trong `ProjectSettings/ProjectVersion.txt`, mở bằng version khác Unity sẽ cảnh báo/re-import lỗi. |
-| Module **Android Build Support** (kèm OpenJDK, Android SDK & NDK Tools) | Bắt buộc nếu build Android — chọn khi cài Editor qua Unity Hub, không cần cài Android Studio riêng. |
-| Module **iOS Build Support** | Bắt buộc nếu build iOS. |
-| **macOS + Xcode** | Chỉ cần nếu build/chạy thử trên iPhone/iPad thật hoặc submit App Store. Không có Mac thì vẫn code/test trên PC bình thường (mục 2), chỉ không build iOS được. |
-| **VSCode** + extension `visualstudiotoolsforunity.vstuc` | Đã cấu hình sẵn trong `.vscode/` — cài extension là dùng được ngay. |
+| `Host` | ThingsBoard base URL |
+| `DeviceId` | Target device UUID |
+| `Username` / `Password` | Account used to obtain and refresh a JWT automatically |
+| `JwtOverride` | Pre-issued JWT for short-lived testing only; expires within hours |
+| `PollSeconds` | Poll interval, clamped to a 5 s minimum (default 10 s) |
 
-Mở project: Unity Hub → **Open** → chọn thư mục [Dragon/](.) (thư mục chứa `Assets/`,
-`ProjectSettings/` — chính là thư mục repo này).
+### Metrics displayed
 
----
+| Key | Unit | Key | Unit |
+|---|---|---|---|
+| `temperature` | °C | `pm25` | µg/m³ |
+| `humidity` | % | `pm10` | µg/m³ |
+| `co2` | ppm | `noise` | dB |
 
-## 2. Chạy & test trên PC (không cần điện thoại thật)
+Keys must match the ThingsBoard timeseries keys exactly. The set is declared once in
+`AppBootstrapper.BubbleMetrics`; display labels are Vietnamese.
 
-Project đã có sẵn **XR Simulation** (AR Foundation 6) — mô phỏng camera + tracking ngay
-trong Editor, không cần build ra máy mỗi lần sửa code.
+### Credential handling
 
-### 2.1. Chạy thử bằng môi trường giả lập (XR Simulation)
+A device access token authorizes telemetry **upload** only — `GET .../values/timeseries`
+returns 401 with that credential. Reading timeseries requires a user JWT.
 
-1. Mở scene chính (`Assets/Scenes/SampleScene.unity`, sẽ đổi thành scene thật khi có
-   `DragonAR.App/Scenes/Main.unity` theo [docs/MODULES.md](docs/MODULES.md#dragonarapp)).
-2. Mở **Window → XR → AR Foundation → XR Environment View** để xem/chỉnh môi trường giả
-   lập (mặc định có sẵn 1 vài scene môi trường mẫu của Unity).
-3. Nhấn **Play** — Game view sẽ hiển thị camera ảo trong môi trường giả lập thay vì camera
-   thật.
-4. Di chuyển camera ảo trong lúc Play: giữ **chuột phải + WASD** để bay quanh, **Q/E** để
-   lên/xuống, giữ **Shift** để di chuyển nhanh hơn (giống điều khiển Scene View).
-5. Để test tracking ảnh (Image Target): thêm ảnh cần nhận diện vào Reference Image
-   Library, rồi đặt 1 bản sao ảnh đó vào trong scene môi trường giả lập (XR Environment) ở
-   vị trí bất kỳ — Simulation sẽ tự nhận diện như thật.
-
-Đây là cách nhanh nhất để lặp code hành vi con rồng (orbit, animation, state machine) mà
-không cần build/cài lên điện thoại mỗi lần sửa 1 dòng.
-
-### 2.2. Chạy automated test (Unity Test Framework)
-
-1. Mở **Window → General → Test Runner**.
-2. Tab **EditMode**: test logic thuần (state machine, toán orbit, event channel — xem
-   phạm vi nên test tại [.claude/skills/unity-clean-architecture/SKILL.md §7](.claude/skills/unity-clean-architecture/SKILL.md#7-testing-strategy)).
-   Nhấn **Run All** — chạy ngay trong Editor, không cần build, vài giây là xong.
-3. Tab **PlayMode**: test cần frame tick thật (ví dụ animation controller phản ứng đúng
-   sau khi nhận event) — nhấn **Run All**, Editor sẽ vào Play mode tự động chạy test.
-4. Chạy test từ command line (hữu ích cho CI sau này):
-   ```
-   Unity -batchmode -projectPath . -runTests -testPlatform EditMode ^
-         -testResults results.xml -quit
-   ```
-   (đường dẫn `Unity` cần trỏ đúng file `Unity.exe` của version 6000.5.8f1 trong Unity
-   Hub, ví dụ `C:\Program Files\Unity\Hub\Editor\6000.5.8f1\Editor\Unity.exe`)
-
-**Lưu ý**: tracking AR thật (độ chính xác nhận diện ảnh/vật thể ngoài đời, ánh sáng, độ che
-khuất) **không test tự động được** — phần này luôn cần build lên thiết bị thật để kiểm tra
-bằng mắt (mục 3).
+Anything compiled into the APK is recoverable; IL2CPP does not protect embedded strings.
+Configure a Customer user scoped to read-only access on the single target device rather than
+a tenant administrator account. For stronger isolation, place a minimal proxy between the
+application and ThingsBoard so credentials never leave the server.
 
 ---
 
-## 3. Nạp xuống điện thoại (build & deploy)
+## 6. Image target
 
-### 3.1. Android
+The reference image library `Assets/Art/Markers/DragonEdenImageLibrary.asset` declares one
+entry, `DragonEden_Station`, at a physical size of **200 × 200 mm**. The declared size does
+not affect detection, but an incorrect value distorts the derived scale and distance of the
+anchored dragon.
 
-1. Bật **Developer Options** trên điện thoại (Settings → About phone → chạm 7 lần vào
-   "Build number"), rồi bật **USB debugging** trong Developer Options.
-2. Cắm điện thoại vào PC qua USB, chọn "Allow" khi điện thoại hỏi cấp quyền debug.
-3. Trong Unity: **File → Build Settings** → chọn **Android** → **Switch Platform** (chỉ
-   cần làm 1 lần, lần sau Unity nhớ platform).
-4. Trước khi build, kiểm tra checklist ở
-   [.claude/skills/unity-android-native/SKILL.md §5](.claude/skills/unity-android-native/SKILL.md#5-production-android-build-settings)
-   (IL2CPP, ARM64, ASTC) — Player Settings hiện tại đã có `AndroidMinSdkVersion: 34`, ARCore
-   chỉ yêu cầu tối thiểu 24 nên vẫn ổn, nhưng **`applicationIdentifier` hiện đang là giá trị
-   mặc định của template** (`com.unity.template.ar_mobile`) — cần đổi sang package name của
-   bạn (ví dụ `com.tencongty.dragonar`) trước khi build thật, xem
-   [context/OPEN_QUESTIONS.md](context/OPEN_QUESTIONS.md) (thêm mục này nếu chưa có).
-5. Điện thoại đang cắm sẵn → bấm **Build And Run**: Unity tự build APK và cài thẳng lên
-   máy, mở app luôn.
-   - Hoặc bấm **Build** để lấy file `.apk`/`.aab`, rồi cài thủ công:
-     `adb install -r duong-dan-file.apk`
-6. Lần đầu mở app, cấp quyền Camera khi được hỏi. Nếu lỡ từ chối và bị màn đen: vào
-   Settings → Apps → Dragon → Permissions → bật lại Camera thủ công (xem hành vi mong muốn
-   ở [.claude/skills/unity-android-native/SKILL.md §4](.claude/skills/unity-android-native/SKILL.md#4-arcore-specific-configuration)).
-7. Xem log khi app đang chạy: **Window → Analysis → Android Logcat** (đã cài sẵn package
-   `com.unity.mobile.android-logcat`).
+Print `T_Marker_DragonEden_200mm_300dpi.png` at 200 mm without scaling, on a matte surface.
+`T_Marker_DragonEden.png` is the 1024 px copy consumed by Unity.
 
-**Build bản release** (để đưa lên Google Play): dùng **Android App Bundle (.aab)**, cần
-tạo/keystore ký app (**Publishing Settings → Keystore Manager**), rồi upload lên Play
-Console (khuyến nghị bắt đầu ở track **Internal testing**, không public thẳng).
+### Regenerating the marker
 
-### 3.2. iOS
+```bash
+cd tools/ar-marker-generator
+pip install Pillow numpy
+python generate_marker.py
+```
 
-Bắt buộc cần **máy Mac có Xcode**. Từ Windows (như PC hiện tại) không build/chạy thử iOS
-trực tiếp được — chỉ có thể code và test bằng XR Simulation (mục 2), sau đó nhờ máy Mac để
-build khi cần chạy thử trên iPhone thật.
+Both PNGs are overwritten in place. Filenames are stable so the reference image library
+never needs to be repointed.
 
-1. Trên Mac: cài Unity Hub + đúng version Editor `6000.5.8f1`, mở project qua Unity Hub
-   (project này, share qua git — xem mục 4).
-2. **File → Build Settings** → chọn **iOS** → **Switch Platform** → **Build** — Unity xuất
-   ra 1 project Xcode (không phải app cài được ngay, cần build tiếp bằng Xcode).
-3. Mở file `.xcodeproj` (hoặc `.xcworkspace` nếu có CocoaPods) vừa xuất ra bằng **Xcode**.
-4. Trong Xcode: chọn **Signing & Capabilities** → chọn Team (Apple ID cá nhân dùng được để
-   test trên thiết bị của chính bạn, không cần trả phí Apple Developer Program — nhưng
-   certificate loại này hết hạn sau 7 ngày, phải build lại).
-5. Cắm iPhone/iPad vào Mac qua cáp, chọn máy đó làm **Run Destination** trong Xcode, bấm
-   **Run (▶)** — app cài thẳng lên máy.
-6. Lần đầu mở app trên máy: vào **Settings → General → VPN & Device Management** trên
-   iPhone, tin tưởng (Trust) certificate của bạn nếu iOS chặn app "chưa xác minh".
+`ARTrackedImageManager` performs classical feature matching — corner detection and
+descriptor comparison — with no machine learning involved. Marker quality therefore depends
+on measurable image properties, which the generator scores automatically against thresholds
+in `marker_lib.py` (≥ 400 keypoints, ≥ 90 % grid coverage, ≥ 0.20 contrast standard
+deviation) and reports as PASS or FAIL:
 
-**Build bản để test rộng hơn (TestFlight)**: cần **Apple Developer Program** (trả phí
-hàng năm) — trong Xcode chọn **Product → Archive**, rồi **Distribute App → App Store
-Connect**, sau đó bật TestFlight trên App Store Connect để mời người test qua link, không
-cần cắm cáp từng máy.
+- **Dense corner features** — smooth gradients yield nothing to detect.
+- **Even coverage** — a marker rich on one half loses tracking when the sparse half fills
+  the frame.
+- **High contrast** — adjacent tonal values match poorly.
+- **Rotational asymmetry** — repeated or symmetric patterns admit orientation ambiguity.
+
+QR codes score poorly despite appearing detailed: uniform module sizing produces repetitive
+texture and the three finder patterns introduce local symmetry.
 
 ---
 
-## 4. Đồng bộ giữa máy Windows (code chính) và máy Mac (build iOS)
+## 7. Development workflow
 
-Project đã có git remote sẵn (`https://github.com/Unray12/Dragon.git`). Quy trình hợp lý:
-code/test chính trên Windows (mục 2), commit + push lên remote, rồi trên Mac chỉ cần
-`git pull` rồi mở lại Unity là build iOS được ngay — không cần đồng bộ thủ công qua USB/
-cloud drive.
+### Editor iteration with XR Simulation
+
+AR Foundation 6 ships an in-Editor simulation of camera and tracking, removing the need to
+deploy on every change.
+
+1. Open `Assets/Scenes/SampleScene.unity`.
+2. Open **Window → XR → AR Foundation → XR Environment View** and select a simulation
+   environment.
+3. Enter Play mode. Navigate with right mouse + WASD, Q/E for vertical movement, Shift to
+   accelerate.
+4. To exercise image tracking, place a copy of the marker texture inside the simulation
+   environment; it is detected as it would be on device.
+
+Tracking accuracy under real-world lighting, occlusion, and surface conditions cannot be
+validated in simulation and requires a device build.
+
+### Automated tests
+
+Run via **Window → General → Test Runner**. EditMode tests cover deterministic logic —
+geometry, telemetry parsing, state transitions. PlayMode tests cover behavior requiring
+frame ticks.
+
+Command line:
+
+```
+Unity -batchmode -projectPath . -runTests -testPlatform EditMode -testResults results.xml -quit
+```
 
 ---
 
-## 5. Khắc phục sự cố nhanh
+## 8. Building
 
-| Vấn đề | Kiểm tra |
+### Android
+
+Current player settings:
+
+| Setting | Value | Rationale |
+|---|---|---|
+| Minimum API level | **29** (Android 10) | ARCore on Unity 6000.5 requires API 26 with OpenGLES3; 29 also satisfies the Vulkan threshold |
+| Target API level | Automatic | Highest installed SDK |
+| Scripting backend | IL2CPP | Mono provides no ARM64 support |
+| Target architecture | ARM64 | Required by Google Play; ARCore native libraries are 64-bit |
+| Graphics API | OpenGLES3 | ARCore's baseline API |
+
+`ARCoreBuildProcessor` enforces the minimum SDK at build time and fails the build rather
+than producing a broken APK.
+
+Deployment:
+
+1. Enable Developer Options and USB debugging on the device, then authorize the host when
+   prompted.
+2. **File → Build Settings → Android → Switch Platform** (once per clone).
+3. **Build And Run** installs and launches directly, or **Build** produces an APK for
+   `adb install -r <file>.apk`.
+4. Grant the camera permission at first launch. A denied permission produces a black
+   camera feed; re-enable it under **Settings → Apps → Permissions**.
+5. Inspect runtime logs through **Window → Analysis → Android Logcat**, or
+   `adb logcat -s Unity ARCore` for a build not attached to the Editor.
+
+> **Before distribution:** `applicationIdentifier` is still the Unity template default
+> (`com.unity.template.ar_mobile`) and must be replaced with a project-owned package name.
+> Release builds additionally require an Android App Bundle and a signing keystore
+> (**Publishing Settings → Keystore Manager**).
+
+Installability does not imply AR capability — the dragon appears only on devices present in
+[Google's ARCore supported device list](https://developers.google.com/ar/devices).
+
+### iOS
+
+Requires macOS with Xcode; iOS builds cannot be produced from Windows.
+
+1. **File → Build Settings → iOS → Switch Platform → Build** to emit an Xcode project.
+2. Open the generated project, set a signing team under **Signing & Capabilities**, select
+   the connected device, and run. Free provisioning profiles expire after seven days.
+3. TestFlight distribution requires a paid Apple Developer Program membership
+   (**Product → Archive → Distribute App**).
+
+---
+
+## 9. Troubleshooting
+
+| Symptom | Check |
 |---|---|
-| Màn hình đen khi mở app trên điện thoại | Quyền Camera có được cấp chưa (Settings → Apps → Dragon → Permissions) |
-| Android báo "cần cài Google Play Services for AR" | Bình thường nếu là lần đầu chạy trên máy đó — làm theo prompt để cài, hoặc thiết bị không hỗ trợ ARCore (kiểm tra trong [danh sách thiết bị hỗ trợ ARCore](https://developers.google.com/ar/devices)) |
-| Build Android báo lỗi Gradle/AGP sau khi update Unity | Xem [.claude/skills/unity-android-native/SKILL.md §5](.claude/skills/unity-android-native/SKILL.md#5-production-android-build-settings) — có thể do Custom Gradle Template hoặc plugin bên thứ 3 chưa tương thích version AGP mới |
-| Không thấy gì trong XR Environment View khi Play | Đảm bảo đã chọn 1 Simulation Environment asset trong **XR Simulation Settings** (`Assets/XR/Settings/XRSimulationSettings.asset`) |
+| Black screen on launch | Camera permission state under **Settings → Apps → Permissions** |
+| Nothing spawns when scanning the marker | Confirm the printed size matches the 200 mm declared in the image library; verify detection reaches `TargetAcquiredOnce` in Logcat |
+| Prompt to install Google Play Services for AR | Expected on first run; otherwise the device may not support ARCore |
+| Magenta materials on device | A material asset is missing from `Resources/`, so the shader was stripped from the build |
+| Dragon scaled incorrectly | `BoundsScaler` reads `sharedMesh.bounds` rather than `SkinnedMeshRenderer.bounds`, which is expanded to cover animation extents |
+| Gradle or AGP errors after a Unity upgrade | Audit custom Gradle templates and third-party `.aar` compatibility |
+| Empty XR Environment View in Play mode | Select a simulation environment in `Assets/XR/UserSimulationSettings/Resources/XRSimulationPreferences.asset` |
