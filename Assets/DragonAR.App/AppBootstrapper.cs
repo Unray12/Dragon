@@ -39,14 +39,25 @@ namespace DragonAR.App
         //
         // Luu y: KHONG co key toc do gio, chi co wind_direction (do). Va cpu_temperature la
         // nhiet do CHIP ESP32 (~52C), khong phai nhiet do moi truong.
+        //
+        // NHAN DE TIENG ANH, khong dau. Ly do la rang buoc that cua font chu khong
+        // phai so thich: font mac dinh (LiberationSans SDF) dung atlas Static gom 250
+        // ky tu ASCII/Latin-1 va KHONG co font fallback nao, nen moi glyph ngoai pham
+        // vi do se khong ve ra duoc. Da do tung ky tu bang TMP_FontAsset.HasCharacter:
+        //   "°" "µ" "³"  -> CO trong atlas, dung duoc binh thuong
+        //   "₂" (U+2082) -> KHONG co, va file LiberationSans.ttf cung khong he co
+        //                   glyph nay -> viet "CO2" bang so 2 thuong.
+        //   chu Viet co dau -> khong co trong atlas (tuy .ttf CO glyph).
+        // Muon dung lai tieng Viet co dau thi phai doi font asset sang che do Dynamic
+        // (Inspector > Atlas Population Mode) de TMP tu nuong them glyph luc chay.
         private static readonly MetricDisplay[] BubbleMetrics =
         {
-            new("temperature", "Nhiệt độ", "°C", decimals: 1),
-            new("humidity", "Độ ẩm", "%", decimals: 1),
-            new("co2", "CO₂", "ppm", decimals: 0),
+            new("temperature", "Temperature", "°C", decimals: 1),
+            new("humidity", "Humidity", "%", decimals: 1),
+            new("co2", "CO2", "ppm", decimals: 0),
             new("pm25", "PM2.5", "µg/m³", decimals: 0),
             new("pm10", "PM10", "µg/m³", decimals: 0),
-            new("noise", "Tiếng ồn", "dB", decimals: 1)
+            new("noise", "Noise", "dB", decimals: 1)
         };
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]

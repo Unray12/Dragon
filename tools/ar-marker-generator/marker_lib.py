@@ -79,11 +79,24 @@ def score_marker(image_path: str, grid: int = 8, sample_size: int = 800) -> dict
 
 # Nguong toi thieu de coi la "du bam tot" - dung chung cho moi lan tao nhan
 # moi, tranh moi nguoi tu dat 1 con so khac nhau roi quen mat vi sao chon.
-# Tham khao Google arcoreimg: khuyen nghi diem chat luong >= 75/100; hai tieu
+# Tham khao Google arcoreimg: khuyen nghi diem chat luong >= 75/100; ba tieu
 # chi duoi day la proxy tuong duong do bang cong cu thuan Python.
 MIN_KEYPOINTS = 400
-MIN_GRID_COVERAGE_PCT = 90.0
 MIN_CONTRAST_STD = 0.20
+
+# Do phu chi 70% chu khong phai 90%: nhan hien tai la ban BO CUC THEO DAI (dai
+# chu o tren, dai hoa tiet o giua, dai waveform o duoi), khong phai ban phu kin
+# hoa tiet toan khung. Dai chu va dai waveform nghe^o dac trung theo dung thiet
+# ke, keo do phu xuong ~77% - mot nhan phu kin dat ~98%. Da do that ca hai:
+#
+#     ban bo cuc theo dai (dang dung)   826 keypoint, phu 76.6%, tuong phan 0.378
+#     ban phu kin hoa tiet              824 keypoint, phu 98.4%, tuong phan 0.413
+#
+# So keypoint - thu ARCore thuc su dem - gan nhu bang nhau, nen nguong 90 cu chi
+# co tac dung loai bo mot lua chon thiet ke hop le chu khong phai loai nhan kem.
+# Giu nguong o 70 de van chan duoc nhan that su lech (vd hoa tiet don ve mot nua
+# khung, nua con lai trong tron), nhung khong ep moi nhan phai phu kin.
+MIN_GRID_COVERAGE_PCT = 70.0
 
 
 def passes_minimum_bar(scores: dict) -> tuple[bool, list[str]]:

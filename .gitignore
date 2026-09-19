@@ -205,3 +205,7 @@ Assets/Resources/ThingsBoardConfig.asset.meta
 .mcp.json
 context/
 docs/
+
+# Bo nho tam cua Python (tools/ar-marker-generator)
+__pycache__/
+*.pyc
